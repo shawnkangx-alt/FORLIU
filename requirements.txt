@@ -1,0 +1,38 @@
+# =============================================
+# FORLIU — 金融股票筛选依赖
+# =============================================
+#
+# 使用方式：
+#   pip install -r requirements.txt
+#
+# 分级说明：
+#   [core]     — 核心运行必需（仅stdlib，无外部依赖）
+#   [optional] — 可选数据源，按需安装
+#   [dev]      — 开发测试用
+#   [chart]    — K线图表（可选）
+
+# ---- [core] ----
+# 无。核心代码只依赖 Python 标准库（sqlite3, urllib, json, re, threading）
+
+# ---- [optional] 数据源 ----
+# AkShare：免费，A股数据覆盖最广，安装后自动启用
+akshare>=1.12
+
+# BaoStock：免费，历史财务数据最全（1990年起）
+baostock>=0.8
+
+# eFinance：免费，新浪行情封装
+efinance>=0.4
+
+# Tushare：高质量数据，需注册获取 token（https://tushare.pro/register）
+# tushare>=1.4
+
+# JoinQuant：聚宽量化平台，需注册获取 token（https://www.joinquant.com）
+# jqdatasdk>=1.8
+
+# ---- [dev] ----
+pytest>=7.0
+
+# ---- [chart] ----
+# mplfinance：K线图表（pip install mplfinance 后 --chart 参数生效）
+# mplfinance>=0.12

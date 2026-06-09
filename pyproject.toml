@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "forliu"
+version = "0.1.0"
+description = "A股金融股票筛选 Skill，支持技术面+基本面可组合策略"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "FORLIU"}
+]
+requires-python = ">=3.9"
+keywords = ["stock", "a股", "筛选", "量化", "finance", "screening"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+
+[project.optional-dependencies]
+akshare = ["akshare>=1.12"]
+baostock = ["baostock>=0.8"]
+efinance = ["efinance>=0.4"]
+all = [
+    "akshare>=1.12",
+    "baostock>=0.8",
+    "efinance>=0.4",
+]
+dev = [
+    "pytest>=7.0",
+]
+chart = ["mplfinance>=0.12"]
+
+[project.scripts]
+forliu = "code.main:main"
+
+[project.urls]
+homepage = "https://github.com/shawnkangx-alt/FORLIU"
+Repository = "https://github.com/shawnkangx-alt/FORLIU"
+Issues = "https://github.com/shawnkangx-alt/FORLIU/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["code*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
