@@ -7,6 +7,27 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
+# 行业板块映射：名称 → 代码集合
+# "semiconductor" 是特殊虚拟行业，从 semiconductor.py 动态获取
+_INDUSTRY_STOCK_CODES: Dict[str, Set[str]] = {}
+
+
+def _get_industry_codes(industry_name: str) -> Optional[Set[str]]:
+    """根据行业名称获取股票代码集合。
+
+    特殊行业：
+    - "半导体" / "semiconductor": 从 semiconductor.py 动态获取
+    - 其他：从东方财富行业分类获取（待实现）
+    返回 None 表示未实现，返回空 set 表示无数据。
+    """
+    name_lower = industry_name.lower()
+    if name_lower in ("半导体", "bandaoti", "semiconductor"):
+        from ..data.semiconductor import get_semiconductor_codes
+
+        return get_semiconductor_codes()
+    # 其他行业暂未实现
+    return None
+
 
 @dataclass
 class MarketCapRange:
@@ -25,10 +46,10 @@ class StockPoolFilter:
         f = StockPoolFilter(
             watchlist_files=["my_stocks.txt"],
             exchanges={"SH", "SZ"},
+            industries={"半导体"},
             market_cap=MarketCapRange(min_total=50, max_total=500),
-            industries={"银行", "医药生物"},
         )
-        filtered = f.apply(stock_dict)  # stock_dict: {code: {"name":..., "industry":..., ...}}
+        filtered = f.filter_codes(all_codes)
     """
 
     # --- 数据源 ---
@@ -62,10 +83,29 @@ class StockPoolFilter:
             print(f"[StockPool] 读取自选股文件失败 {filepath}: {e}")
 
     def filter_codes(self, codes: List[str]) -> List[str]:
-        """对候选股票代码列表进行过滤，返回符合条件的代码。"""
+        """对候选股票代码列表进行过滤，返回符合条件的代码。
+
+        特殊处理：如果 industries 包含"半导体"（或别名），
+        则直接使用半导体股票集合作为搜索空间，忽略 codes 参数。
+        """
+        # 行业过滤优先：如果是半导体，直接用半导体集合，不依赖 provider 的股票列表
+        if self.industries and any(
+            n.lower() in ("半导体", "bandaoti", "semiconductor")
+            for n in self.industries
+        ):
+            from ..data.semiconductor import get_semiconductor_codes
+
+            semi_codes = get_semiconductor_codes()
+            # 同时应用其他过滤条件
+            result = list(semi_codes)
+            result = self._filter_by_exchange(result)
+            result = self._filter_by_st(result)
+            return result
+
         result = codes
         result = self._filter_by_watchlist(result)
         result = self._filter_by_exchange(result)
+        result = self._filter_by_industry(result)
         result = self._filter_by_st(result)
         return result
 
@@ -78,6 +118,27 @@ class StockPoolFilter:
         if not self.exchanges:
             return codes
         return [c for c in codes if self._get_exchange(c) in self.exchanges]
+
+    def _filter_by_industry(self, codes: List[str]) -> List[str]:
+        """按行业板块过滤。
+
+        特殊行业（如"半导体"）从 semiconductor.py 动态获取代码列表。
+        其他行业暂不支持。
+        """
+        if not self.industries:
+            return codes
+        result: List[str] = []
+        for code in codes:
+            for industry in self.industries:
+                codes_for_industry = _get_industry_codes(industry)
+                if codes_for_industry is None:
+                    # 行业未实现，跳过该过滤条件并打印警告
+                    print(f"[StockPool] 行业 '{industry}' 暂不支持，将跳过板块过滤")
+                    break
+                if code in codes_for_industry:
+                    result.append(code)
+                    break
+        return result if result else codes  # 空结果说明无匹配，返回原始列表
 
     def _filter_by_st(self, codes: List[str]) -> List[str]:
         """排除 ST 股票（通过名称判断，需外部传入名称映射）。"""

@@ -403,7 +403,7 @@ class WebProvider(DataProvider):
 
     def get_financials(self, stock_code: str, report_type: str = "annual") -> FinancialReport:
         result = self.get_batch_financials([stock_code], report_type)
-        return result.get(stock_code, FinancialReport(stock_code=stock_code))
+        return result.get(stock_code, FinancialReport(stock_code=stock_code, report_date=None))
 
     def _fetch_all_financials(self) -> Dict[str, FinancialReport]:
         """从 Eastmoney 拉全量财务数据（最新报告期），返回以代码为键的字典。"""

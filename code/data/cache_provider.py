@@ -171,6 +171,79 @@ class CacheProvider(DataProvider):
                 conn.commit()
                 conn.close()
         return stocks
+
+    # ------------------------------------------------------------------
+    # 数据新鲜度查询
+    # ------------------------------------------------------------------
+
+    def get_data_freshness(self, stock_codes: List[str]) -> Dict[str, dict]:
+        """返回各数据的最新获取时间。
+
+        Returns:
+            {
+                "quotes": {"latest": datetime or None, "oldest": datetime or None},
+                "financials": {"latest": datetime or None},
+                "stock_list": {"fetched_at": datetime or None, "count": int},
+            }
+        """
+        import sqlite3
+        result = {
+            "quotes": {"latest": None, "oldest": None},
+            "financials": {"latest": None},
+            "stock_list": {"fetched_at": None, "count": 0},
+        }
+        with self._lock:
+            conn = sqlite3.connect(self.db_path)
+            # 股票列表
+            row = conn.execute(
+                "SELECT MAX(fetched_at) FROM stock_list WHERE source IN (%s)"
+                % ",".join("?" * len(_REAL_PROVIDER_NAMES)),
+                list(_REAL_PROVIDER_NAMES)
+            ).fetchone()
+            if row and row[0]:
+                try:
+                    result["stock_list"]["fetched_at"] = datetime.fromisoformat(row[0])
+                    result["stock_list"]["count"] = conn.execute(
+                        "SELECT COUNT(*) FROM stock_list WHERE source IN (%s)"
+                        % ",".join("?" * len(_REAL_PROVIDER_NAMES)),
+                        list(_REAL_PROVIDER_NAMES)
+                    ).fetchone()[0]
+                except (ValueError, TypeError):
+                    pass
+            # 行情最新/最早
+            if stock_codes:
+                placeholders = ",".join("?" * len(stock_codes))
+                row = conn.execute(
+                    f"SELECT MAX(fetched_at), MIN(fetched_at) FROM quotes WHERE stock_code IN ({placeholders}) AND source IN (%s)"
+                    % ",".join("?" * len(_REAL_PROVIDER_NAMES)),
+                    stock_codes + list(_REAL_PROVIDER_NAMES)
+                ).fetchone()
+                if row and row[0]:
+                    try:
+                        result["quotes"]["latest"] = datetime.fromisoformat(row[0])
+                    except (ValueError, TypeError):
+                        pass
+                if row and row[1]:
+                    try:
+                        result["quotes"]["oldest"] = datetime.fromisoformat(row[1])
+                    except (ValueError, TypeError):
+                        pass
+            # 财务最新
+            if stock_codes:
+                placeholders = ",".join("?" * len(stock_codes))
+                row = conn.execute(
+                    f"SELECT MAX(fetched_at) FROM financials WHERE stock_code IN ({placeholders}) AND source IN (%s)"
+                    % ",".join("?" * len(_REAL_PROVIDER_NAMES)),
+                    stock_codes + list(_REAL_PROVIDER_NAMES)
+                ).fetchone()
+                if row and row[0]:
+                    try:
+                        result["financials"]["latest"] = datetime.fromisoformat(row[0])
+                    except (ValueError, TypeError):
+                        pass
+            conn.close()
+        return result
+
     # 行情数据
     # ------------------------------------------------------------------
 

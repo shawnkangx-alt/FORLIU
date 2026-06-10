@@ -1,6 +1,6 @@
 """技术面和基本面指标计算器。所有函数为纯函数，无副作用。"""
 
-from typing import Callable, Dict, List
+from typing import Any, Callable, Dict, List, Union
 
 from ..data.models import DailyQuote, FinancialReport, IndicatorType
 
@@ -174,6 +174,108 @@ def calc_volume_ratio(quotes: List[DailyQuote]) -> float:
     return round(current_vol / avg_vol, 4) if avg_vol > 0 else 1.0
 
 
+def calc_turnover_rate(quotes: List[DailyQuote]) -> float:
+    """换手率：当日成交量 / 总股本（需要市值数据，暂无）。返回成交量趋势。"""
+    if len(quotes) < 2:
+        return 0.0
+    # 简化：近5日均量 vs 近20日均量（量能趋势）
+    if len(quotes) < 21:
+        return 1.0
+    current_avg = sum(q.volume for q in quotes[-5:]) / 5
+    hist_avg = sum(q.volume for q in quotes[-20:]) / 20
+    return round(current_avg / hist_avg, 4) if hist_avg > 0 else 1.0
+
+
+def calc_volume(quotes: List[DailyQuote]) -> float:
+    """最新成交量（万手）。"""
+    if not quotes:
+        return 0.0
+    return round(quotes[-1].volume, 2)
+
+
+def calc_obv(quotes: List[DailyQuote]) -> float:
+    """OBV 能量潮指标：累计量净流入。"""
+    if len(quotes) < 2:
+        return 0.0
+    obv = 0.0
+    for i in range(1, len(quotes)):
+        if quotes[i].close > quotes[i - 1].close:
+            obv += quotes[i].volume
+        elif quotes[i].close < quotes[i - 1].close:
+            obv -= quotes[i].volume
+    return round(obv, 2)
+
+
+def calc_dmi(
+    quotes: List[DailyQuote], period: int = 14
+) -> Dict[str, float]:
+    """DMI 动向指标。返回 adx, +di, -di。
+
+    ADX > 25 表示趋势强；+di > -di 为多头信号。
+    """
+    if len(quotes) < period + 1:
+        return {"adx": 0.0, "di_plus": 0.0, "di_minus": 0.0}
+
+    tr_list = []
+    dm_plus_list = []
+    dm_minus_list = []
+
+    for i in range(1, len(quotes)):
+        high, low, prev_close = quotes[i].high, quotes[i].low, quotes[i - 1].close
+        tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
+        dm_plus = max(high - quotes[i - 1].high, 0) if (high - quotes[i - 1].high) > (quotes[i - 1].low - low) else 0
+        dm_minus = max(quotes[i - 1].low - low, 0) if (quotes[i - 1].low - low) > (high - quotes[i - 1].high) else 0
+        tr_list.append(tr)
+        dm_plus_list.append(dm_plus)
+        dm_minus_list.append(dm_minus)
+
+    # ATR
+    atr = sum(tr_list[:period]) / period
+    for i in range(period, len(tr_list)):
+        atr = (atr * (period - 1) + tr_list[i]) / period
+
+    di_plus_raw = sum(dm_plus_list[:period]) / period if atr != 0 else 0
+    di_minus_raw = sum(dm_minus_list[:period]) / period if atr != 0 else 0
+    di_plus = round(di_plus_raw / atr * 100, 4) if atr != 0 else 0.0
+    di_minus = round(di_minus_raw / atr * 100, 4) if atr != 0 else 0.0
+
+    # ADX
+    dx_list = []
+    for i in range(period, len(tr_list)):
+        atr_i = (atr * (period - 1) + tr_list[i]) / period
+        dm_plus_i = sum(dm_plus_list[i - period + 1:i + 1]) / period
+        dm_minus_i = sum(dm_minus_list[i - period + 1:i + 1]) / period
+        di_plus_i = round(dm_plus_i / atr_i * 100, 4) if atr_i != 0 else 0.0
+        di_minus_i = round(dm_minus_i / atr_i * 100, 4) if atr_i != 0 else 0.0
+        dx = abs(di_plus_i - di_minus_i) / (di_plus_i + di_minus_i) * 100 if (di_plus_i + di_minus_i) > 0 else 0
+        dx_list.append(dx)
+
+    adx = round(sum(dx_list) / len(dx_list), 4) if dx_list else 0.0
+
+    return {"adx": adx, "di_plus": di_plus, "di_minus": di_minus}
+
+
+def calc_wr(quotes: List[DailyQuote], period: int = 14) -> float:
+    """WR 威廉指标。0~-100，超卖>-80，超买<-20。"""
+    if len(quotes) < period:
+        return -50.0
+    highest = max(q.high for q in quotes[-period:])
+    lowest = min(q.low for q in quotes[-period:])
+    close = quotes[-1].close
+    if highest == lowest:
+        return -50.0
+    wr = (highest - close) / (highest - lowest) * -100
+    return round(wr, 4)
+
+
+def calc_psy(quotes: List[DailyQuote], period: int = 12) -> float:
+    """PSY 心理线。上涨天数占比。>75偏热，<25偏冷。"""
+    if len(quotes) < period + 1:
+        return 50.0
+    up_days = sum(1 for i in range(1, period + 1) if quotes[i].close > quotes[i - 1].close)
+    return round(up_days / period * 100, 4)
+
+
 def calc_latest_ma_cross(quotes: List[DailyQuote], fast: int, slow: int) -> str:
     """检测最近一期均线交叉状态。返回 'golden', 'death', 或 'none'。"""
     ma_fast = calc_ma(quotes, fast)
@@ -258,6 +360,26 @@ TECHNICAL_INDICATORS = {
     IndicatorType.KDJ,
     IndicatorType.VOLUME,
     IndicatorType.BOLLINGER,
+    IndicatorType.DMI,
+    IndicatorType.OBV,
+    IndicatorType.WR,
+    IndicatorType.PSY,
+    IndicatorType.TURNOVER_RATE,
+}
+
+TECHNICAL_GETTERS: Dict[IndicatorType, Callable[..., Union[float, Dict]]] = {
+    # (quotes, **params) -> float | Dict
+    IndicatorType.MA: lambda q, **k: calc_ma(q, **k)[-1] if calc_ma(q, **k)[-1] != 0 else calc_ma(q, **k)[-2],
+    IndicatorType.MACD: lambda q, **k: calc_macd(q, **k)["dif"][-1],
+    IndicatorType.RSI: lambda q, **k: calc_rsi(q, **k)[-1],
+    IndicatorType.KDJ: lambda q, **k: calc_kdj(q, **k)["k"][-1],
+    IndicatorType.VOLUME: calc_volume,
+    IndicatorType.BOLLINGER: lambda q, **k: calc_bollinger(q, **k)["upper"][-1],
+    IndicatorType.DMI: lambda q, **k: calc_dmi(q, **k)["adx"],
+    IndicatorType.OBV: calc_obv,
+    IndicatorType.WR: calc_wr,
+    IndicatorType.PSY: calc_psy,
+    IndicatorType.TURNOVER_RATE: calc_turnover_rate,
 }
 
 FUNDAMENTAL_INDICATORS = set(FUNDAMENTAL_GETTERS.keys())

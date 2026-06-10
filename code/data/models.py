@@ -29,6 +29,11 @@ class IndicatorType(str, Enum):
     KDJ = "kdj"
     VOLUME = "volume"
     BOLLINGER = "bollinger"
+    DMI = "dmi"
+    OBV = "obv"
+    WR = "wr"
+    PSY = "psy"
+    TURNOVER_RATE = "turnover_rate"
     # Fundamental
     PE = "pe"
     PB = "pb"
@@ -61,7 +66,7 @@ class DailyQuote:
 @dataclass
 class FinancialReport:
     stock_code: str
-    report_date: date
+    report_date: date = None  # type: ignore[assignment]
     report_type: str = "annual"  # "annual" | "quarterly" | "ttm"
     pe: float = 0
     pb: float = 0

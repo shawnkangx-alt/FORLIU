@@ -135,7 +135,17 @@ class _StrategyRunner:
             codes = [s.code for s in stocks]
             filtered_codes = pool_filter.filter_codes(codes)
             code_set = set(filtered_codes)
-            stocks = [s for s in stocks if s.code in code_set]
+
+            # 特殊情况：过滤后的代码不在 provider 原始列表里（如半导体板块）
+            # 此时用 filtered_codes 作为搜索空间，从 provider 批量补充 Stock 对象
+            original_codes = set(codes)
+            missing_codes = code_set - original_codes
+            if missing_codes:
+                # 用 provider 批量获取缺失代码的 Stock 信息（只取 name）
+                extra_stocks = self._fetch_stock_names(list(missing_codes))
+                stocks = [s for s in stocks if s.code in code_set] + extra_stocks
+            else:
+                stocks = [s for s in stocks if s.code in code_set]
 
         if not stocks or not strategy.rules:
             return []
@@ -210,6 +220,27 @@ class _StrategyRunner:
             raise RuntimeError("筛选完成但无符合条件结果。\n" + "\n".join(parts))
 
         return results
+
+    def _fetch_stock_names(self, codes: List[str]) -> List["Stock"]:
+        """根据代码列表获取股票名称，返回 Stock 对象列表。
+
+        优先使用 semiconductor.py 里的静态名称映射，
+        兜底用腾讯实时行情 API 获取。
+        """
+        from ..data.models import Stock
+        from ..data.semiconductor import get_semiconductor_stocks
+
+        # 从 semiconductor.py 获取名称映射
+        semi_map = {s[0]: s[1] for s in get_semiconductor_stocks()}
+
+        stocks = []
+        for code in codes:
+            name = semi_map.get(code, "")
+            from ..data.models import Market
+
+            market_val = Market.SH if code.startswith(("6", "9")) else Market.SZ
+            stocks.append(Stock(code=code, name=name or code, market=market_val))
+        return stocks
 
     def _collect_indicators(
         self, rules: List[Rule], quotes: List[DailyQuote], financials: FinancialReport
